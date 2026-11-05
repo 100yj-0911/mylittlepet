@@ -6,17 +6,9 @@ import json
 import math
 import os
 import random
-import struct
-import tempfile
 import time
-import wave
 from pathlib import Path
 import tkinter as tk
-
-try:
-    import winsound
-except ImportError:  # pragma: no cover - Windows is the intended platform
-    winsound = None
 
 
 APP_DIR = Path(__file__).resolve().parent
@@ -81,7 +73,6 @@ SPRITES = {
 }
 
 NAMES = {"dog": "강아지", "cat": "고양이"}
-CALL_WORDS = {"dog": "멍!", "cat": "야옹!"}
 
 
 def load_settings() -> dict:
@@ -118,42 +109,6 @@ def save_follow_mouse(enabled: bool) -> None:
     save_settings(settings)
 
 
-def create_call_sound(pet: str) -> str | None:
-    """Synthesize a short, playful bark or meow using only the Python standard library."""
-    if winsound is None:
-        return None
-    output = Path(tempfile.gettempdir()) / f"mylittlepet_{pet}.wav"
-    if output.exists():
-        return str(output)
-
-    rate = 22050
-    duration = 0.64 if pet == "cat" else 0.53
-    count = int(rate * duration)
-    samples = []
-    for i in range(count):
-        t = i / rate
-        if pet == "dog":
-            pulse = max(math.exp(-((t - 0.13) / 0.12) ** 2), 0.83 * math.exp(-((t - 0.38) / 0.12) ** 2))
-            freq = 205 - 95 * (t / duration)
-            envelope = pulse * min(1.0, t * 35) * min(1.0, (duration - t) * 28)
-        else:
-            progress = t / duration
-            freq = 440 - 190 * progress + 28 * math.sin(progress * math.pi * 2)
-            envelope = min(1.0, t * 12) * min(1.0, (duration - t) * 8)
-        phase = 2 * math.pi * freq * t
-        voice = (math.sin(phase) + 0.40 * math.sin(phase * 2.03) + 0.17 * math.sin(phase * 3.08)) / 1.57
-        if pet == "dog":
-            voice = voice * 0.80 + 0.20 * math.sin(phase * 0.48)
-        sample = max(-1.0, min(1.0, voice * envelope * 0.68))
-        samples.append(struct.pack("<h", int(sample * 32767)))
-    with wave.open(str(output), "wb") as wav:
-        wav.setnchannels(1)
-        wav.setsampwidth(2)
-        wav.setframerate(rate)
-        wav.writeframes(b"".join(samples))
-    return str(output)
-
-
 class DesktopPet:
     def __init__(self, root: tk.Tk, pet: str):
         self.root = root
@@ -175,7 +130,6 @@ class DesktopPet:
         self.frame = 0
         self.action: str | None = None
         self.action_until = 0.0
-        self.last_call = time.monotonic() + random.uniform(10, 18)
         self.bubble = ""
         self.bubble_until = 0.0
         self.root.withdraw()
@@ -268,8 +222,8 @@ class DesktopPet:
                  font=("Malgun Gothic", 9)).pack(pady=(0, 16))
         buttons = tk.Frame(body, bg="#fffaf0")
         buttons.pack()
-        for kind, emoji, title, desc in (("dog", "🐶", "강아지", "꼬리를 흔들며 멍멍!"),
-                                         ("cat", "🐱", "고양이", "살금살금 다니며 야옹!")):
+        for kind, emoji, title, desc in (("dog", "🐶", "강아지", "꼬리를 흔들어요"),
+                                         ("cat", "🐱", "고양이", "살금살금 움직여요")):
             card = tk.Button(buttons, text=f"{emoji}\n{title}\n{desc}", width=16, height=5,
                              bg="#f8eadc" if kind == "dog" else "#e8e9f3",
                              fg="#403b45", activebackground="#f5d4b6",
@@ -299,20 +253,11 @@ class DesktopPet:
         self.draw()
         self.root.deiconify()
 
-    def play_call(self) -> None:
-        path = create_call_sound(self.pet)
-        if path and winsound:
-            try:
-                winsound.PlaySound(path, winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_NODEFAULT)
-            except RuntimeError:
-                pass
-
     def interact(self, action: str) -> None:
         self.action = action
         self.action_until = time.monotonic() + (2.3 if action == "pet" else 2.8)
         self.bubble = random.choice(("기분 좋아!", "고마워!", "좋아요!")) if action == "pet" else random.choice(("냠냠!", "맛있다!", "간식이다!") )
         self.bubble_until = self.action_until
-        self.play_call()
         self.draw()
 
     def draw_sprite(self) -> None:
@@ -434,11 +379,6 @@ class DesktopPet:
                     self.y = min(max(self.y, 0), max_y)
         self.root.geometry(f"{CANVAS_W}x{CANVAS_H}+{int(self.x)}+{int(self.y)}")
         self.frame += 1
-        if now >= self.last_call:
-            self.bubble = CALL_WORDS[self.pet]
-            self.bubble_until = now + 1.7
-            self.play_call()
-            self.last_call = now + random.uniform(18, 35)
         self.draw()
         self.root.after(90, self.tick)
 
