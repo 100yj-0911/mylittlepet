@@ -162,6 +162,11 @@ class DesktopPet:
         self.sprite_items: list[int] = []
         self.x = 100.0
         self.y = 100.0
+        self.dragging = False
+        self.drag_offset_x = 0.0
+        self.drag_offset_y = 0.0
+        self.follow_offset_x = CANVAS_W / 2
+        self.follow_offset_y = CANVAS_H / 2
         self.follow_mouse = load_follow_mouse()
         self.follow_var = tk.BooleanVar(root, value=self.follow_mouse)
         self.roam_dx = random.choice((-0.9, 0.9))
@@ -202,6 +207,9 @@ class DesktopPet:
         self.menu.add_command(label="종료", command=self.root.destroy)
         self.canvas.bind("<Button-3>", self.show_menu)
         self.canvas.bind("<Button-2>", self.show_menu)
+        self.canvas.bind("<ButtonPress-1>", self.start_drag)
+        self.canvas.bind("<B1-Motion>", self.drag_pet)
+        self.canvas.bind("<ButtonRelease-1>", self.stop_drag)
         self.draw()
         self.root.deiconify()
         self.root.after(500, self.tick)
@@ -218,6 +226,31 @@ class DesktopPet:
         save_follow_mouse(self.follow_mouse)
         self.bubble = "따라갈게!" if self.follow_mouse else "자유롭게 돌아다닐게!"
         self.bubble_until = time.monotonic() + 2.0
+
+    def start_drag(self, event: tk.Event) -> str:
+        self.dragging = True
+        self.drag_offset_x = event.x_root - self.x
+        self.drag_offset_y = event.y_root - self.y
+        return "break"
+
+    def drag_pet(self, event: tk.Event) -> str:
+        if not self.dragging:
+            return "break"
+        max_x = max(0, self.root.winfo_screenwidth() - CANVAS_W)
+        max_y = max(0, self.root.winfo_screenheight() - CANVAS_H)
+        self.x = min(max(event.x_root - self.drag_offset_x, 0), max_x)
+        self.y = min(max(event.y_root - self.drag_offset_y, 0), max_y)
+        self.root.geometry(f"{CANVAS_W}x{CANVAS_H}+{int(self.x)}+{int(self.y)}")
+        return "break"
+
+    def stop_drag(self, event: tk.Event) -> str:
+        if self.dragging:
+            self.dragging = False
+            if self.follow_mouse:
+                # Keep the grabbed point under the pointer after the drop.
+                self.follow_offset_x = event.x_root - self.x
+                self.follow_offset_y = event.y_root - self.y
+        return "break"
 
     def choose_pet(self) -> None:
         self.root.withdraw()
@@ -376,10 +409,10 @@ class DesktopPet:
         # Follow the pointer or wander freely, keeping the pet fully on-screen.
         max_x = max(0, screen_w - CANVAS_W)
         max_y = max(0, screen_h - CANVAS_H)
-        if not self.menu.winfo_ismapped():
+        if not self.dragging and not self.menu.winfo_ismapped():
             if self.follow_mouse:
-                target_x = min(max(self.root.winfo_pointerx() - CANVAS_W / 2, 0), max_x)
-                target_y = min(max(self.root.winfo_pointery() - CANVAS_H / 2, 0), max_y)
+                target_x = min(max(self.root.winfo_pointerx() - self.follow_offset_x, 0), max_x)
+                target_y = min(max(self.root.winfo_pointery() - self.follow_offset_y, 0), max_y)
                 offset_x, offset_y = target_x - self.x, target_y - self.y
                 distance = math.hypot(offset_x, offset_y)
                 if distance > 1:
