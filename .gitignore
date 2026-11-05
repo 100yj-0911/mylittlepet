@@ -1,0 +1,11 @@
+# Per-user pet choice and follow-mode preference
+pet_settings.json
+
+# Python generated files
+__pycache__/
+*.py[cod]
+
+# Local assets and operating-system metadata
+*.wav
+Thumbs.db
+.DS_Store
