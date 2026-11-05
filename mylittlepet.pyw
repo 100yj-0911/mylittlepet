@@ -132,6 +132,7 @@ class DesktopPet:
         self.action_until = 0.0
         self.bubble = ""
         self.bubble_until = 0.0
+        self.next_idle_bubble = time.monotonic() + random.uniform(6.0, 12.0)
         self.root.withdraw()
         self.root.overrideredirect(True)
         self.root.attributes("-topmost", True)
@@ -180,6 +181,7 @@ class DesktopPet:
         save_follow_mouse(self.follow_mouse)
         self.bubble = "따라갈게!" if self.follow_mouse else "자유롭게 돌아다닐게!"
         self.bubble_until = time.monotonic() + 2.0
+        self.next_idle_bubble = self.bubble_until + random.uniform(8.0, 16.0)
 
     def start_drag(self, event: tk.Event) -> str:
         self.dragging = True
@@ -250,6 +252,7 @@ class DesktopPet:
         self.action = None
         self.bubble = "새 친구가 왔어요!"
         self.bubble_until = time.monotonic() + 2.5
+        self.next_idle_bubble = self.bubble_until + random.uniform(8.0, 16.0)
         self.draw()
         self.root.deiconify()
 
@@ -258,6 +261,7 @@ class DesktopPet:
         self.action_until = time.monotonic() + (2.3 if action == "pet" else 2.8)
         self.bubble = random.choice(("기분 좋아!", "고마워!", "좋아요!")) if action == "pet" else random.choice(("냠냠!", "맛있다!", "간식이다!") )
         self.bubble_until = self.action_until
+        self.next_idle_bubble = self.bubble_until + random.uniform(8.0, 16.0)
         self.draw()
 
     def draw_sprite(self) -> None:
@@ -325,10 +329,23 @@ class DesktopPet:
         self.canvas.delete("all")
         now = time.monotonic()
         if self.bubble and now < self.bubble_until:
-            self.canvas.create_rectangle(38, 8, 138, 33, fill="#fffaf0", outline="#ead9c5", width=1)
-            self.canvas.create_polygon(79, 32, 86, 32, 81, 38, fill="#fffaf0", outline="#ead9c5")
-            self.canvas.create_text(88, 20, text=self.bubble, fill="#51424a",
-                                    font=("Malgun Gothic", 9, "bold"))
+            text_id = self.canvas.create_text(
+                CANVAS_W // 2, 20, text=self.bubble, fill="#51424a",
+                font=("Malgun Gothic", 9, "bold"), width=CANVAS_W - 24,
+            )
+            left, top, right, bottom = self.canvas.bbox(text_id)
+            x1, y1 = max(5, left - 8), max(3, top - 5)
+            x2, y2 = min(CANVAS_W - 5, right + 8), bottom + 5
+            tail_x = min(max(CANVAS_W // 2, x1 + 12), x2 - 12)
+            tail_id = self.canvas.create_polygon(
+                tail_x - 4, y2 - 1, tail_x + 4, y2 - 1, tail_x, y2 + 6,
+                fill="#fffaf0", outline="#ead9c5",
+            )
+            bubble_id = self.canvas.create_rectangle(
+                x1, y1, x2, y2, fill="#fffaf0", outline="#ead9c5", width=1,
+            )
+            self.canvas.tag_lower(tail_id, text_id)
+            self.canvas.tag_lower(bubble_id, text_id)
         self.draw_sprite()
         if self.action == "pet" and now < self.action_until:
             for cx, cy in ((40, 67), (137, 74), (47, 122)):
@@ -351,6 +368,11 @@ class DesktopPet:
         screen_w, screen_h = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
         if self.action and now >= self.action_until:
             self.action = None
+        if (not self.action and not self.dragging and not self.menu.winfo_ismapped()
+                and now >= self.bubble_until and now >= self.next_idle_bubble):
+            self.bubble = "멍!" if self.pet == "dog" else "야옹"
+            self.bubble_until = now + 1.8
+            self.next_idle_bubble = self.bubble_until + random.uniform(8.0, 16.0)
         # Follow the pointer or wander freely, keeping the pet fully on-screen.
         max_x = max(0, screen_w - CANVAS_W)
         max_y = max(0, screen_h - CANVAS_H)
